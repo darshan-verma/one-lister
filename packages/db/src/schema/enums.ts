@@ -42,7 +42,6 @@ export const movementReasonEnum = pgEnum("movement_reason", [
   "sale",
   "cancellation",
   "return_restock",
-  "return_damaged",
   "transfer_in",
   "transfer_out",
 ]);

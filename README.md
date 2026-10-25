@@ -59,6 +59,7 @@ Production `start` scripts do **not** use `--env-file` — set env vars in the p
 | `pnpm db:generate` | Generate Drizzle migrations from schema        |
 | `pnpm db:migrate`  | Apply Drizzle migrations                       |
 | `pnpm db:seed`     | Idempotent demo seller / catalog seed          |
+| `pnpm --filter @one-lister/db test` | DB integration tests (`TEST_DATABASE_URL`) |
 
 ## Workspace layout
 

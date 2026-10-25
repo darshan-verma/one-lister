@@ -1,4 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -19,10 +22,7 @@ export const syncRuns = pgTable(
     sellerId: uuid("seller_id")
       .notNull()
       .references(() => sellers.id, { onDelete: "restrict" }),
-    channelAccountId: uuid("channel_account_id").references(
-      () => channelAccounts.id,
-      { onDelete: "restrict" },
-    ),
+    channelAccountId: uuid("channel_account_id"),
     type: syncRunTypeEnum("type").notNull(),
     status: syncRunStatusEnum("status").notNull(),
     bullmqJobId: text("bullmq_job_id"),
@@ -35,7 +35,16 @@ export const syncRuns = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    foreignKey({
+      name: "sync_account_seller_fk",
+      columns: [t.channelAccountId, t.sellerId],
+      foreignColumns: [channelAccounts.id, channelAccounts.sellerId],
+    }).onDelete("restrict"),
     index("sync_runs_seller_id_created_at_idx").on(t.sellerId, t.createdAt.desc()),
+    index("sync_runs_channel_account_id_idx").on(t.channelAccountId),
+    check("sync_runs_items_total_nonneg", sql`${t.itemsTotal} >= 0`),
+    check("sync_runs_items_succeeded_nonneg", sql`${t.itemsSucceeded} >= 0`),
+    check("sync_runs_items_failed_nonneg", sql`${t.itemsFailed} >= 0`),
   ],
 );
 

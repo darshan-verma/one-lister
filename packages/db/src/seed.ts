@@ -1,6 +1,7 @@
 /**
  * Idempotent demo seed for local development.
  * Does NOT insert inventory — that goes through the ledger in a later step.
+ * Does NOT insert channel_listings yet; when added, set external_sku = sku.
  */
 import { and, eq, isNull } from "drizzle-orm";
 

@@ -5,6 +5,7 @@ import {
   jsonb,
   pgTable,
   text,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -12,14 +13,22 @@ import {
 import { sellerStatusEnum } from "./enums.js";
 import { timestamps } from "./helpers.js";
 
-export const sellers = pgTable("sellers", {
-  id: uuid("id").primaryKey(),
-  displayName: text("display_name").notNull(),
-  legalName: text("legal_name").notNull(),
-  gstin: text("gstin"),
-  status: sellerStatusEnum("status").notNull().default("active"),
-  ...timestamps,
-});
+export const sellers = pgTable(
+  "sellers",
+  {
+    id: uuid("id").primaryKey(),
+    displayName: text("display_name").notNull(),
+    legalName: text("legal_name").notNull(),
+    gstin: text("gstin"),
+    status: sellerStatusEnum("status").notNull().default("active"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("sellers_gstin_uidx")
+      .on(t.gstin)
+      .where(sql`${t.gstin} is not null`),
+  ],
+);
 
 export const stockLocations = pgTable(
   "stock_locations",
@@ -34,6 +43,7 @@ export const stockLocations = pgTable(
     ...timestamps,
   },
   (t) => [
+    unique("stock_locations_id_seller_uidx").on(t.id, t.sellerId),
     index("stock_locations_seller_id_idx").on(t.sellerId),
     uniqueIndex("stock_locations_one_default_per_seller_idx")
       .on(t.sellerId)

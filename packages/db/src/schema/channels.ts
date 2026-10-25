@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   foreignKey,
   index,
   integer,
@@ -49,6 +50,7 @@ export const channelAccounts = pgTable(
     ...timestamps,
   },
   (t) => [
+    unique("channel_accounts_id_seller_uidx").on(t.id, t.sellerId),
     index("channel_accounts_seller_id_idx").on(t.sellerId),
     unique("channel_accounts_seller_marketplace_external_unique").on(
       t.sellerId,
@@ -59,6 +61,10 @@ export const channelAccounts = pgTable(
     uniqueIndex("channel_accounts_seller_marketplace_unconnected_idx")
       .on(t.sellerId, t.marketplace)
       .where(sql`${t.externalSellerId} is null`),
+    check(
+      "channel_accounts_default_safety_buffer_nonneg",
+      sql`${t.defaultSafetyBuffer} >= 0`,
+    ),
   ],
 );
 
@@ -69,16 +75,14 @@ export const channelListings = pgTable(
     sellerId: uuid("seller_id")
       .notNull()
       .references(() => sellers.id, { onDelete: "restrict" }),
-    variantId: uuid("variant_id")
-      .notNull()
-      .references(() => variants.id, { onDelete: "restrict" }),
-    channelAccountId: uuid("channel_account_id")
-      .notNull()
-      .references(() => channelAccounts.id, { onDelete: "restrict" }),
+    variantId: uuid("variant_id").notNull(),
+    channelAccountId: uuid("channel_account_id").notNull(),
     status: listingStatusEnum("status").notNull().default("draft"),
     /** Marketplace product id (ASIN, FSN, etc.). */
     externalProductId: text("external_product_id"),
     externalListingId: text("external_listing_id"),
+    /** Marketplace seller SKU for this listing; used for order-line mapping. */
+    externalSku: text("external_sku"),
     channelCategoryId: text("channel_category_id"),
     channelAttributes: jsonb("channel_attributes")
       .$type<Record<string, unknown>>()
@@ -93,6 +97,17 @@ export const channelListings = pgTable(
     ...timestamps,
   },
   (t) => [
+    unique("channel_listings_id_seller_uidx").on(t.id, t.sellerId),
+    foreignKey({
+      name: "cl_variant_seller_fk",
+      columns: [t.variantId, t.sellerId],
+      foreignColumns: [variants.id, variants.sellerId],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "cl_account_seller_fk",
+      columns: [t.channelAccountId, t.sellerId],
+      foreignColumns: [channelAccounts.id, channelAccounts.sellerId],
+    }).onDelete("restrict"),
     index("channel_listings_seller_id_idx").on(t.sellerId),
     unique("channel_listings_variant_channel_account_unique").on(
       t.variantId,
@@ -101,6 +116,17 @@ export const channelListings = pgTable(
     index("channel_listings_channel_account_status_idx").on(
       t.channelAccountId,
       t.status,
+    ),
+    uniqueIndex("channel_listings_account_external_sku_uidx")
+      .on(t.channelAccountId, t.externalSku)
+      .where(sql`${t.externalSku} is not null`),
+    check(
+      "channel_listings_price_override_positive",
+      sql`${t.priceOverridePaise} is null or ${t.priceOverridePaise} > 0`,
+    ),
+    check(
+      "channel_listings_safety_buffer_override_nonneg",
+      sql`${t.safetyBufferOverride} is null or ${t.safetyBufferOverride} >= 0`,
     ),
   ],
 );
@@ -112,7 +138,6 @@ export const channelListingEvents = pgTable(
     sellerId: uuid("seller_id")
       .notNull()
       .references(() => sellers.id, { onDelete: "restrict" }),
-    // FK named explicitly — auto name exceeds Postgres's 63-char identifier limit.
     channelListingId: uuid("channel_listing_id").notNull(),
     fromStatus: listingStatusEnum("from_status"),
     toStatus: listingStatusEnum("to_status").notNull(),
@@ -122,9 +147,9 @@ export const channelListingEvents = pgTable(
   },
   (t) => [
     foreignKey({
-      name: "cle_channel_listing_id_fk",
-      columns: [t.channelListingId],
-      foreignColumns: [channelListings.id],
+      name: "cle_listing_seller_fk",
+      columns: [t.channelListingId, t.sellerId],
+      foreignColumns: [channelListings.id, channelListings.sellerId],
     }).onDelete("restrict"),
     index("channel_listing_events_seller_id_idx").on(t.sellerId),
     index("channel_listing_events_listing_created_at_idx").on(
