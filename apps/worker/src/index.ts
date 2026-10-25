@@ -1,5 +1,5 @@
 import { loadEnv } from "@one-lister/config/env";
-import { Queue, Worker, type ConnectionOptions } from "bullmq";
+import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 
 import { QUEUE_NAMES, type QueueName } from "./queues.js";
@@ -10,24 +10,35 @@ const connection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 
-const connectionOptions = connection as unknown as ConnectionOptions;
-
 const queues = new Map<QueueName, Queue>();
 const workers: Worker[] = [];
 
+function attachWorkerLogging(worker: Worker, queueName: string): void {
+  worker.on("error", (error) => {
+    console.error(`[${queueName}] worker error: ${error.message}`);
+  });
+  worker.on("failed", (job, error) => {
+    console.error(
+      `[${queueName}] job ${job?.id ?? "unknown"} failed: ${error.message}`,
+    );
+  });
+}
+
 function createPlaceholderWorker(name: Exclude<QueueName, "heartbeat">): Worker {
-  return new Worker(
+  const worker = new Worker(
     name,
     async (job) => {
       console.log(`[${name}] job ${job.id ?? "unknown"} received`, job.name);
     },
-    { connection: connectionOptions },
+    { connection },
   );
+  attachWorkerLogging(worker, name);
+  return worker;
 }
 
 async function setup(): Promise<void> {
   for (const name of QUEUE_NAMES) {
-    queues.set(name, new Queue(name, { connection: connectionOptions }));
+    queues.set(name, new Queue(name, { connection }));
   }
 
   for (const name of QUEUE_NAMES) {
@@ -42,8 +53,9 @@ async function setup(): Promise<void> {
     async () => {
       console.log(`[heartbeat] ${new Date().toISOString()}`);
     },
-    { connection: connectionOptions },
+    { connection },
   );
+  attachWorkerLogging(heartbeatWorker, "heartbeat");
   workers.push(heartbeatWorker);
 
   const heartbeatQueue = queues.get("heartbeat");

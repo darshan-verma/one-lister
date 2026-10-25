@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "turbo run dev --filter=@one-lister/web --filter=@one-lister/worker",
+    "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
