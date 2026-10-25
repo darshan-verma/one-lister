@@ -116,6 +116,9 @@ export async function getTestDb(
 }
 
 const TENANT_TABLES = [
+  "audit_events",
+  "seller_invitations",
+  "seller_members",
   "sync_runs",
   "channel_listing_events",
   "channel_listings",
@@ -130,6 +133,10 @@ const TENANT_TABLES = [
   "channel_accounts",
   "stock_locations",
   "sellers",
+  "session",
+  "account",
+  "verification",
+  "user",
 ] as const;
 
 /** Wipe tenant data between tests (keeps drizzle migrations table). */

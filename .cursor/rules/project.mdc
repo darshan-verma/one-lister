@@ -33,6 +33,10 @@ Deployment target: AWS ap-south-1 (ECS Fargate, RDS Postgres, ElastiCache, S3, K
 - Config comes from environment variables, validated with Zod at startup. Keep .env.example updated.
 - Business logic lives in packages/core, not in Next.js routes or job handlers.
   Routes and handlers stay thin.
+- ALL data access for seller-scoped pages and API routes must go through a context
+  obtained from `requireSellerContext` (apps/web/src/server/auth). Never trust a
+  sellerId from the URL alone. Proxy/middleware may only redirect unauthenticated
+  users — it is never the sole authorization check. Non-members get 404 (not 403).
 
 # Conventions
 - pnpm only. Use latest stable versions; check before adding a dependency.

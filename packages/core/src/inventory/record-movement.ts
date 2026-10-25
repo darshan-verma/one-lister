@@ -11,6 +11,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
+  IdempotencyConflictError,
   InsufficientStockError,
   InvalidMovementError,
   TenantMismatchError,
@@ -99,7 +100,8 @@ function mapDriverError(
   if (
     err instanceof InsufficientStockError ||
     err instanceof TenantMismatchError ||
-    err instanceof InvalidMovementError
+    err instanceof InvalidMovementError ||
+    err instanceof IdempotencyConflictError
   ) {
     throw err;
   }
@@ -228,6 +230,34 @@ export async function recordMovement(
               sellerId: input.sellerId,
               idempotencyKey: input.idempotencyKey,
               cause: "idempotency_race",
+            },
+          );
+        }
+
+        const fieldsMatch =
+          existing.variantId === input.variantId &&
+          existing.locationId === input.locationId &&
+          existing.quantityDelta === input.quantityDelta &&
+          existing.reason === input.reason;
+
+        if (!fieldsMatch) {
+          throw new IdempotencyConflictError(
+            "idempotency key reused with different movement payload",
+            {
+              sellerId: existing.sellerId,
+              idempotencyKey: existing.idempotencyKey,
+              variantId: existing.variantId,
+              locationId: existing.locationId,
+              quantityDelta: existing.quantityDelta,
+              reason: existing.reason,
+            },
+            {
+              sellerId: input.sellerId,
+              idempotencyKey: input.idempotencyKey,
+              variantId: input.variantId,
+              locationId: input.locationId,
+              quantityDelta: input.quantityDelta,
+              reason: input.reason,
             },
           );
         }

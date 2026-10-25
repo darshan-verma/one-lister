@@ -7,6 +7,10 @@ const envSchema = z.object({
   APP_URL: z.string().url(),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
+  /** Better Auth signing secret — min 32 chars. Generate with `openssl rand -base64 32`. */
+  BETTER_AUTH_SECRET: z.string().min(32),
+  /** Base URL Better Auth uses for callbacks; defaults to APP_URL when unset. */
+  BETTER_AUTH_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

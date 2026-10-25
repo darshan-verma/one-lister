@@ -82,3 +82,11 @@ export const syncRunStatusEnum = pgEnum("sync_run_status", [
   "partially_failed",
   "failed",
 ]);
+
+/** Null on the user row = normal seller user (not platform staff). */
+export const platformRoleEnum = pgEnum("platform_role", ["ops_agent", "admin"]);
+
+export const sellerMemberRoleEnum = pgEnum("seller_member_role", [
+  "owner",
+  "staff",
+]);

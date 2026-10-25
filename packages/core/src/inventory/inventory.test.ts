@@ -20,6 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  IdempotencyConflictError,
   InsufficientStockError,
   InvalidMovementError,
   TenantMismatchError,
@@ -158,6 +159,63 @@ describe("inventory ledger", () => {
       .from(inventoryMovements)
       .where(eq(inventoryMovements.sellerId, sellerId));
     expect(rows).toHaveLength(1);
+  });
+
+  it("exact idempotent retry → applied: false", async () => {
+    const { sellerId, locationId, variantId } = await seedSeller(db, "idem-retry");
+    const key = `recv:${variantId}:exact-retry`;
+    const payload = {
+      sellerId,
+      variantId,
+      locationId,
+      quantityDelta: 8,
+      reason: "receive" as const,
+      sourceType: "manual",
+      idempotencyKey: key,
+    };
+
+    const first = await recordMovement(db, payload);
+    const retry = await recordMovement(db, payload);
+
+    expect(first.applied).toBe(true);
+    expect(retry.applied).toBe(false);
+    expect(retry.movement.id).toBe(first.movement.id);
+    expect(await getStockLevel(db, sellerId, variantId)).toBe(8);
+  });
+
+  it("same key, different quantity → IdempotencyConflictError and writes nothing", async () => {
+    const { sellerId, locationId, variantId } = await seedSeller(db, "idem-conflict");
+    const key = `recv:${variantId}:conflict-qty`;
+
+    await recordMovement(db, {
+      sellerId,
+      variantId,
+      locationId,
+      quantityDelta: 5,
+      reason: "receive",
+      sourceType: "manual",
+      idempotencyKey: key,
+    });
+
+    await expect(
+      recordMovement(db, {
+        sellerId,
+        variantId,
+        locationId,
+        quantityDelta: 9,
+        reason: "receive",
+        sourceType: "manual",
+        idempotencyKey: key,
+      }),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+
+    const rows = await db
+      .select()
+      .from(inventoryMovements)
+      .where(eq(inventoryMovements.sellerId, sellerId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.quantityDelta).toBe(5);
+    expect(await getStockLevel(db, sellerId, variantId)).toBe(5);
   });
 
   it("same idempotency key for two different sellers → both applied", async () => {

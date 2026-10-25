@@ -54,3 +54,29 @@ export class InvalidMovementError extends Error {
     super(message);
   }
 }
+
+/** Non-sensitive movement fields compared for idempotency key reuse. */
+export type IdempotencyConflictPayload = {
+  sellerId: string;
+  idempotencyKey: string;
+  variantId: string;
+  locationId: string;
+  quantityDelta: number;
+  reason: string;
+};
+
+/**
+ * Thrown when the same (sellerId, idempotencyKey) is reused with a different
+ * variantId, locationId, quantityDelta, or reason.
+ */
+export class IdempotencyConflictError extends Error {
+  override readonly name = "IdempotencyConflictError";
+
+  constructor(
+    message: string,
+    readonly existing: IdempotencyConflictPayload,
+    readonly attempted: IdempotencyConflictPayload,
+  ) {
+    super(message);
+  }
+}
