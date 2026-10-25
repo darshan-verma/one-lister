@@ -29,6 +29,9 @@ export default async function SellerHomePage({ params }: Props) {
         Your role: <strong>{roleLabel}</strong>
       </p>
       <nav className="flex gap-4 text-sm">
+        <Link className="underline" href={`/s/${sellerId}/products`}>
+          Products
+        </Link>
         <Link className="underline" href={`/s/${sellerId}/team`}>
           Team
         </Link>

@@ -31,6 +31,22 @@ services:
       timeout: 5s
       retries: 10
 
+  # S3-compatible local store. Official minio/minio is currently unavailable
+  # on Docker Hub from this environment; adobe/s3mock provides the same API
+  # surface (presigned PUT/GET/HEAD/DELETE) and creates the bucket on startup.
+  minio:
+    image: adobe/s3mock:latest
+    container_name: one-lister-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9090"
+    environment:
+      initialBuckets: one-lister
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    volumes:
+      - minio_data:/tmp/s3mock
+
 volumes:
   postgres_data:
   redis_data:
+  minio_data:

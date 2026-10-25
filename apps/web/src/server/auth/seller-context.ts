@@ -9,6 +9,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { getAppDb } from "@/lib/db";
 import { getRedis } from "@/lib/redis";
+import { getClientIp } from "@/server/http";
 
 import {
   evaluateSellerAccess,
@@ -57,7 +58,7 @@ export async function requireSellerContext(
           : null,
     },
     sellerId,
-    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip"),
+    ip: getClientIp(h, env.TRUSTED_PROXY_COUNT),
     userAgent: h.get("user-agent"),
   });
 

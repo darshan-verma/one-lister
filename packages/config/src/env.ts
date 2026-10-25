@@ -11,6 +11,21 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   /** Base URL Better Auth uses for callbacks; defaults to APP_URL when unset. */
   BETTER_AUTH_URL: z.string().url().optional(),
+  /**
+   * Number of trusted reverse proxies that append to X-Forwarded-For.
+   * 0 in local/dev (do not trust XFF); 1 behind AWS ALB.
+   */
+  TRUSTED_PROXY_COUNT: z.coerce.number().int().min(0).default(0),
+  /** Product image / asset bucket. */
+  S3_BUCKET: z.string().min(1),
+  S3_REGION: z.string().min(1),
+  /** S3-compatible endpoint (MinIO). Only set in local/dev; omit in AWS. */
+  S3_ENDPOINT: z.string().url().optional(),
+  /** Explicit credentials for MinIO/dev. Omit in AWS to use the task role. */
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  /** Public base URL for reading objects (CDN or MinIO path-style). */
+  S3_PUBLIC_BASE_URL: z.string().url(),
 });
 
 export type Env = z.infer<typeof envSchema>;

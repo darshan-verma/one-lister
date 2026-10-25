@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 
 import { getAppDb } from "@/lib/db";
 import { getEmailSender } from "@/lib/email";
+import { mapActionError } from "@/server/action-errors";
 import { requireRole, requireSellerContext } from "@/server/auth";
 
 export type InviteState = {
@@ -52,9 +53,7 @@ export async function inviteMemberAction(
     revalidatePath(`/s/${ctx.sellerId}/team`);
     return { inviteUrl };
   } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : "Failed to invite",
-    };
+    return { error: mapActionError(err, "inviteMemberAction") };
   }
 }
 

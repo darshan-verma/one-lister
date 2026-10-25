@@ -2,7 +2,12 @@ import { loadEnv } from "@one-lister/config/env";
 import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 
-import { QUEUE_NAMES, type QueueName } from "./queues.js";
+import { handleImageProcess } from "./jobs/image-process.js";
+import {
+  QUEUE_NAMES,
+  type ImageProcessJobPayload,
+  type QueueName,
+} from "./queues.js";
 
 const env = loadEnv();
 
@@ -24,7 +29,7 @@ function attachWorkerLogging(worker: Worker, queueName: string): void {
   });
 }
 
-function createPlaceholderWorker(name: Exclude<QueueName, "heartbeat">): Worker {
+function createPlaceholderWorker(name: Exclude<QueueName, "heartbeat" | "image-process">): Worker {
   const worker = new Worker(
     name,
     async (job) => {
@@ -42,11 +47,22 @@ async function setup(): Promise<void> {
   }
 
   for (const name of QUEUE_NAMES) {
-    if (name === "heartbeat") {
+    if (name === "heartbeat" || name === "image-process") {
       continue;
     }
     workers.push(createPlaceholderWorker(name));
   }
+
+  const imageWorker = new Worker<ImageProcessJobPayload>(
+    "image-process",
+    async (job) => handleImageProcess(job),
+    {
+      connection,
+      concurrency: 2,
+    },
+  );
+  attachWorkerLogging(imageWorker, "image-process");
+  workers.push(imageWorker);
 
   const heartbeatWorker = new Worker(
     "heartbeat",
@@ -63,7 +79,6 @@ async function setup(): Promise<void> {
     throw new Error("heartbeat queue missing");
   }
 
-  // Immediate tick so local verification doesn't wait a full minute.
   await heartbeatQueue.add("tick", {}, { removeOnComplete: 100, removeOnFail: 100 });
 
   await heartbeatQueue.upsertJobScheduler(

@@ -4,6 +4,7 @@ import { createSeller } from "@one-lister/core";
 import { redirect } from "next/navigation";
 
 import { getAppDb } from "@/lib/db";
+import { mapActionError } from "@/server/action-errors";
 import { requireUser } from "@/server/auth";
 
 export type CreateSellerState = {
@@ -32,17 +33,6 @@ export async function createSellerAction(
     });
     redirect(`/s/${result.sellerId}`);
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to create seller";
-    // Next.js redirect throws; rethrow those.
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "digest" in err &&
-      String((err as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
-    ) {
-      throw err;
-    }
-    return { error: message };
+    return { error: mapActionError(err, "createSellerAction") };
   }
 }

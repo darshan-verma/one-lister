@@ -1,3 +1,49 @@
+/** Thrown when optimistic concurrency fails (updatedAt mismatch). */
+export class ConcurrentEditError extends Error {
+  override readonly name = "ConcurrentEditError";
+
+  constructor(
+    message: string,
+    readonly context: {
+      resource: "product" | "variant";
+      id: string;
+      expectedUpdatedAt: Date;
+      actualUpdatedAt: Date;
+    },
+  ) {
+    super(message);
+  }
+}
+
+/** Thrown when a product/variant is not found for the seller (tenant isolation). */
+export class ProductNotFoundError extends Error {
+  override readonly name = "ProductNotFoundError";
+
+  constructor(
+    message: string,
+    readonly context: {
+      sellerId: string;
+      productId?: string;
+      variantId?: string;
+      imageId?: string;
+    },
+  ) {
+    super(message);
+  }
+}
+
+/** Thrown when setProductStatus(active) is called on an incomplete product. */
+export class IncompleteProductError extends Error {
+  override readonly name = "IncompleteProductError";
+
+  constructor(
+    message: string,
+    readonly missing: Array<{ field: string; variantSku?: string; message: string }>,
+  ) {
+    super(message);
+  }
+}
+
 /** Thrown when an adjustment/transfer_out would drive on_hand below zero. */
 export class InsufficientStockError extends Error {
   override readonly name = "InsufficientStockError";

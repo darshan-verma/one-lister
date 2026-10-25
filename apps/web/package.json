@@ -17,6 +17,7 @@
     "@one-lister/core": "workspace:*",
     "@one-lister/db": "workspace:*",
     "better-auth": "1.7.12",
+    "bullmq": "^6.4.2",
     "drizzle-orm": "^0.45.4",
     "ioredis": "^5.8.2",
     "next": "^16.4.3",

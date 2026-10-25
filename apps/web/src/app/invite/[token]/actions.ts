@@ -1,9 +1,10 @@
 "use server";
 
-import { acceptInvitation, InvitationError } from "@one-lister/core";
+import { acceptInvitation } from "@one-lister/core";
 import { redirect } from "next/navigation";
 
 import { getAppDb } from "@/lib/db";
+import { mapActionError } from "@/server/action-errors";
 import { requireUser } from "@/server/auth";
 
 export type AcceptInvitationResult =
@@ -30,20 +31,6 @@ export async function acceptInvitationAction(
     });
     return { ok: true, sellerId: result.member.sellerId };
   } catch (err) {
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "digest" in err &&
-      String((err as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
-    ) {
-      throw err;
-    }
-    const message =
-      err instanceof InvitationError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : "Could not accept invitation";
-    return { ok: false, error: message };
+    return { ok: false, error: mapActionError(err, "acceptInvitationAction") };
   }
 }

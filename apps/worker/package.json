@@ -12,9 +12,15 @@
     "test": "echo \"no tests in @one-lister/worker\""
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
     "@one-lister/config": "workspace:*",
+    "@one-lister/core": "workspace:*",
+    "@one-lister/db": "workspace:*",
     "bullmq": "^6.4.2",
-    "ioredis": "^5.8.2"
+    "drizzle-orm": "^0.45.4",
+    "ioredis": "^5.8.2",
+    "postgres": "^3.4.9",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@one-lister/config": "workspace:*",
