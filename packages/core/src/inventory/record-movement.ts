@@ -118,10 +118,9 @@ function mapDriverError(
     );
   }
 
-  throw new InvalidMovementError("unexpected database error recording movement", {
-    ...ctx,
-    cause: code ?? "unknown",
-  });
+  // Transient / unexpected driver errors (deadlock 40P01, serialization 40001,
+  // connection loss, etc.) must reach the job layer unchanged so BullMQ can retry.
+  throw err;
 }
 
 function syntheticZeroLevel(

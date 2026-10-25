@@ -8,6 +8,7 @@ import {
   sellers,
   stockLocations,
   variants,
+  type Db,
 } from "@one-lister/db";
 import {
   closeTestDb,
@@ -339,6 +340,43 @@ describe("inventory ledger", () => {
         idempotencyKey: `recv:${a.variantId}:x`,
       }),
     ).rejects.toBeInstanceOf(TenantMismatchError);
+  });
+
+  it("rethrows transient DB errors (e.g. deadlock 40P01) as-is, not InvalidMovementError", async () => {
+    const deadlock = Object.assign(new Error("deadlock detected"), { code: "40P01" });
+    const fakeDb = {
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          query: {
+            variants: {
+              findFirst: async () => {
+                throw deadlock;
+              },
+            },
+          },
+        };
+        return fn(tx);
+      },
+    } as unknown as Db;
+
+    const variantId = newId();
+
+    try {
+      await recordMovement(fakeDb, {
+        sellerId: newId(),
+        variantId,
+        locationId: newId(),
+        quantityDelta: 1,
+        reason: "receive",
+        sourceType: "manual",
+        idempotencyKey: `recv:${variantId}:1`,
+      });
+      expect.fail("expected deadlock to be rethrown");
+    } catch (err) {
+      expect(err).toBe(deadlock);
+      expect(err).not.toBeInstanceOf(InvalidMovementError);
+      expect(err).not.toBeInstanceOf(TenantMismatchError);
+    }
   });
 
   it("CONCURRENCY: 50 sales of 1 against stock of 50 → on_hand 0, 50 rows, version +50", async () => {
