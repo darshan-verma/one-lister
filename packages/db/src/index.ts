@@ -5,4 +5,5 @@ export {
   type Db,
   type DbClient,
 } from "./client.js";
-export * from "./schema.js";
+export { newId } from "./id.js";
+export * from "./schema/index.js";

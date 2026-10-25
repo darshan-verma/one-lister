@@ -5,3 +5,6 @@ export const appMeta = pgTable("app_meta", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export type AppMeta = typeof appMeta.$inferSelect;
+export type NewAppMeta = typeof appMeta.$inferInsert;
