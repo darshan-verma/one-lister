@@ -11,6 +11,7 @@
     "db:generate": "pnpm --filter @one-lister/db generate",
     "db:migrate": "pnpm --filter @one-lister/db migrate",
     "db:seed": "pnpm --filter @one-lister/db seed",
+    "seed": "pnpm db:seed && pnpm --filter @one-lister/core seed:inventory",
     "format": "prettier --write ."
   },
   "devDependencies": {

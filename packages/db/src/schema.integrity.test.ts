@@ -95,7 +95,7 @@ describe("schema integrity", () => {
   let db: TestDb;
 
   beforeAll(async () => {
-    ({ db } = await getTestDb());
+    ({ db } = await getTestDb({ packageSuffix: "db" }));
   });
 
   beforeEach(async () => {
