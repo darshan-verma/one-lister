@@ -1,0 +1,3 @@
+# Flipkart connector
+
+Not implemented.

@@ -1,0 +1,42 @@
+---
+description: Core rules for the multichannel listing platform
+alwaysApply: true
+---
+
+# Project
+A multichannel e-commerce platform for Indian sellers. Sellers create products once;
+the platform lists them on Amazon, Flipkart, Meesho and Ajio, keeps inventory synced
+across all channels, reads orders/returns, and shows a dashboard. An internal ops
+team onboards sellers onto marketplaces.
+
+# Architecture (modular monolith, pnpm + Turborepo monorepo)
+- apps/web: Next.js (App Router) — seller dashboard, ops panel, API routes, webhook receivers
+- apps/worker: long-running Node process — BullMQ consumers and schedulers
+- packages/db: Drizzle schema, migrations, query helpers
+- packages/core: business logic (catalog, inventory ledger, listing state machine)
+- packages/connectors: one folder per marketplace, all implementing the shared
+  MarketplaceConnector interface
+- packages/config: shared tsconfig / eslint
+Deployment target: AWS ap-south-1 (ECS Fargate, RDS Postgres, ElastiCache, S3, KMS).
+
+# Hard rules
+- TypeScript strict mode everywhere. No `any` unless justified in a comment.
+- The web app NEVER calls marketplace APIs inside a request. It enqueues a job; the worker does it.
+- Our database is the source of truth for catalog and inventory. Marketplaces are outputs.
+- Inventory is an append-only ledger of movements. Never overwrite a stock number.
+- Every job must be idempotent (use idempotency keys, e.g. marketplace order ID).
+- Money is stored as integer paise. Never floats.
+- All timestamps stored in UTC (timestamptz). Display in Asia/Kolkata.
+- Never store marketplace passwords. Only OAuth tokens, encrypted, referenced via a secrets layer.
+- Never log tokens, secrets, or seller KYC data.
+- Validate all external input (API bodies, webhooks, marketplace responses) with Zod.
+- Config comes from environment variables, validated with Zod at startup. Keep .env.example updated.
+- Business logic lives in packages/core, not in Next.js routes or job handlers.
+  Routes and handlers stay thin.
+
+# Conventions
+- pnpm only. Use latest stable versions; check before adding a dependency.
+- Tests: Vitest. Core logic (ledger, mappings, validation) must have unit tests.
+- Named exports, no default exports except where Next.js requires them.
+- Small files, clear names. Do not create abstractions until they are needed twice.
+- When unsure about a marketplace API's behaviour, leave a TODO and say so. Never invent endpoints.

@@ -1,0 +1,3 @@
+# Amazon connector
+
+Not implemented.

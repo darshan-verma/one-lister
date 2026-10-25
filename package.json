@@ -1,0 +1,20 @@
+{
+  "name": "one-lister",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "dev": "turbo run dev --filter=@one-lister/web --filter=@one-lister/worker",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @one-lister/db generate",
+    "db:migrate": "pnpm --filter @one-lister/db migrate",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.10",
+    "typescript": "^5.9.3"
+  }
+}

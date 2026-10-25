@@ -1,0 +1,37 @@
+{
+  "name": "@one-lister/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"no tests in @one-lister/db\""
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@one-lister/config": "workspace:*",
+    "@types/node": "^24.10.0",
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^9.39.0",
+    "typescript": "^5.9.3"
+  }
+}
