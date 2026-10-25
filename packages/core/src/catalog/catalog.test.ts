@@ -1,4 +1,5 @@
 import {
+  auditEvents,
   newId,
   productImages,
   products,
@@ -11,7 +12,7 @@ import {
   resetTestDb,
   type TestDb,
 } from "@one-lister/db/testing";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -22,7 +23,9 @@ import {
 import { formatPaise, rupeesToPaise } from "../money.js";
 import { createSeller } from "../sellers/create-seller.js";
 import type { ObjectStorage } from "../storage/types.js";
+import { verifyAndFinalizeImage } from "./image-process.js";
 import { confirmImageUpload, requestImageUpload } from "./images.js";
+import { listProducts } from "./list.js";
 import {
   archiveProduct,
   createProduct,
@@ -30,6 +33,7 @@ import {
   setProductStatus,
   updateProduct,
 } from "./products.js";
+import { escapeIlikePattern } from "./search.js";
 import { adjustStock, getVariantStock, setInitialStock } from "./stock.js";
 import type { JobEnqueuer } from "./types.js";
 
@@ -51,9 +55,8 @@ function mockStorage(overrides: Partial<ObjectStorage> = {}): ObjectStorage {
   };
 }
 
-const jobs: JobEnqueuer = {
-  enqueueImageProcess: vi.fn(async () => undefined),
-};
+const enqueueImageProcess = vi.fn(async () => undefined);
+const jobs: JobEnqueuer = { enqueueImageProcess };
 
 describe("catalog", () => {
   let db: TestDb;
@@ -66,6 +69,7 @@ describe("catalog", () => {
 
   beforeEach(async () => {
     await resetTestDb();
+    enqueueImageProcess.mockClear();
 
     const userA = `user_a_${newId()}`;
     const userB = `user_b_${newId()}`;
@@ -227,6 +231,9 @@ describe("catalog", () => {
       productId: product.id,
       s3Key: `sellers/${sellerA.sellerId}/products/${product.id}/x.jpg`,
       position: 0,
+      status: "ready",
+      width: 100,
+      height: 100,
     });
 
     const v = vs[0]!;
@@ -304,7 +311,202 @@ describe("catalog", () => {
     );
     expect(img1.position).toBe(0);
     expect(img2.position).toBe(1);
-    expect(jobs.enqueueImageProcess).toHaveBeenCalled();
+    expect(img1.status).toBe("pending");
+    expect(enqueueImageProcess).toHaveBeenCalledTimes(2);
+  });
+
+  it("images: confirm same key twice → one row, one job", async () => {
+    const { product } = await createProduct(db, sellerA, {
+      title: "Idempotent img",
+      sellingPriceRupees: 100,
+      mrpRupees: 200,
+    });
+    const storage = mockStorage({
+      headObject: vi.fn(async () => ({
+        exists: true,
+        contentType: "image/png",
+        contentLength: 2048,
+      })),
+    });
+    const key = `sellers/${sellerA.sellerId}/products/${product.id}/${newId()}.png`;
+
+    const first = await confirmImageUpload(
+      db,
+      storage,
+      jobs,
+      sellerA,
+      product.id,
+      key,
+    );
+    const second = await confirmImageUpload(
+      db,
+      storage,
+      jobs,
+      sellerA,
+      product.id,
+      key,
+    );
+
+    expect(second.id).toBe(first.id);
+    expect(enqueueImageProcess).toHaveBeenCalledTimes(1);
+
+    const rows = await db.query.productImages.findMany({
+      where: and(
+        eq(productImages.sellerId, sellerA.sellerId),
+        eq(productImages.s3Key, key),
+      ),
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("images: non-image bytes uploaded as png are rejected and removed", async () => {
+    const { product } = await createProduct(db, sellerA, {
+      title: "Fake png",
+      sellingPriceRupees: 100,
+      mrpRupees: 200,
+    });
+    const storage = mockStorage();
+    const imageId = newId();
+    const key = `sellers/${sellerA.sellerId}/products/${product.id}/${newId()}.png`;
+
+    await db.insert(productImages).values({
+      id: imageId,
+      sellerId: sellerA.sellerId,
+      productId: product.id,
+      s3Key: key,
+      position: 0,
+      status: "pending",
+    });
+
+    const outcome = await verifyAndFinalizeImage(db, storage, {
+      productImageId: imageId,
+      sellerId: sellerA.sellerId,
+      productId: product.id,
+      s3Key: key,
+      bytes: Buffer.from("this is not a png file at all"),
+      actorUserId: sellerA.userId,
+    });
+
+    expect(outcome).toBe("rejected");
+    expect(storage.deleteObject).toHaveBeenCalledWith(key);
+
+    const row = await db.query.productImages.findFirst({
+      where: eq(productImages.id, imageId),
+    });
+    expect(row).toBeUndefined();
+
+    const audit = await db.query.auditEvents.findFirst({
+      where: and(
+        eq(auditEvents.action, "product_image.rejected"),
+        eq(auditEvents.targetId, imageId),
+      ),
+    });
+    expect(audit).toBeDefined();
+  });
+
+  it("pending images do not satisfy completeness", async () => {
+    const { product, variants: vs } = await createProduct(db, sellerA, {
+      title: "Pending img",
+      sellingPriceRupees: 100,
+      mrpRupees: 200,
+      description: "desc",
+      brand: "B",
+      hsnCode: "6109",
+      gstRateBps: 1800,
+      countryOfOrigin: "IN",
+    });
+    await db
+      .update(variants)
+      .set({
+        weightGrams: 1,
+        lengthMm: 1,
+        widthMm: 1,
+        heightMm: 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(variants.id, vs[0]!.id));
+
+    await db.insert(productImages).values({
+      id: newId(),
+      sellerId: sellerA.sellerId,
+      productId: product.id,
+      s3Key: `sellers/${sellerA.sellerId}/products/${product.id}/p.jpg`,
+      position: 0,
+      status: "pending",
+    });
+
+    const result = await getProductCompleteness(db, sellerA, product.id);
+    expect(result.complete).toBe(false);
+    expect(result.missing.some((m) => m.field === "images")).toBe(true);
+  });
+
+  it("listProducts: 30 products same timestamp paginate without skip/dup", async () => {
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < 30; i++) {
+        const productId = newId();
+        await tx.insert(products).values({
+          id: productId,
+          sellerId: sellerA.sellerId,
+          title: `Bulk ${i.toString().padStart(2, "0")}`,
+          status: "draft",
+          createdAt: now,
+          updatedAt: now,
+        });
+        await tx.insert(variants).values({
+          id: newId(),
+          productId,
+          sellerId: sellerA.sellerId,
+          sku: `BULK-${i}-${productId.slice(0, 8)}`,
+          mrpPaise: 100,
+          sellingPricePaise: 100,
+          status: "draft",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+
+    const page1 = await listProducts(db, sellerA, { limit: 25 });
+    expect(page1.items).toHaveLength(25);
+    expect(page1.nextCursor).toBeTruthy();
+
+    const page2 = await listProducts(db, sellerA, {
+      limit: 25,
+      cursor: page1.nextCursor!,
+    });
+    expect(page2.items).toHaveLength(5);
+    expect(page2.nextCursor).toBeNull();
+
+    const ids = [...page1.items, ...page2.items].map((i) => i.product.id);
+    expect(ids).toHaveLength(30);
+    expect(new Set(ids).size).toBe(30);
+
+    const invalid = await listProducts(db, sellerA, {
+      limit: 25,
+      cursor: "not-a-valid-cursor",
+    });
+    expect(invalid.items).toHaveLength(25);
+  });
+
+  it("escapeIlikePattern escapes %, _, and backslash", () => {
+    expect(escapeIlikePattern("100%_off\\")).toBe("100\\%\\_off\\\\");
+  });
+
+  it("listProducts search treats % as a literal", async () => {
+    await createProduct(db, sellerA, {
+      title: "Sale 50% off",
+      sellingPriceRupees: 100,
+      mrpRupees: 200,
+    });
+    await createProduct(db, sellerA, {
+      title: "Sale 50X off",
+      sellingPriceRupees: 100,
+      mrpRupees: 200,
+    });
+
+    const hit = await listProducts(db, sellerA, { search: "50%" });
+    expect(hit.items.map((i) => i.product.title)).toEqual(["Sale 50% off"]);
   });
 
   it("stock: adjustStock via ledger; same client uuid is idempotent", async () => {

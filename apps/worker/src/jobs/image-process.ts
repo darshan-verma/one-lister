@@ -1,35 +1,53 @@
-import { updateImageDimensions } from "@one-lister/core";
+import { verifyAndFinalizeImage } from "@one-lister/core";
 import type { Job } from "bullmq";
-import sharp from "sharp";
 
 import { getWorkerDb } from "../db.js";
 import type { ImageProcessJobPayload } from "../queues.js";
-import { downloadObjectBytes } from "../storage.js";
+import { downloadObjectBytes, getObjectStorage } from "../storage.js";
 
 /**
- * Download the uploaded image, read width/height with sharp, update product_images.
- * Retries/backoff are configured on the BullMQ worker. Logs failures without PII.
+ * Download the uploaded image, verify real image content with sharp, then
+ * mark ready or reject (delete S3 + row + audit). Content rejections do not
+ * throw — the job completes after cleanup so BullMQ does not retry forever.
  */
 export async function handleImageProcess(
   job: Job<ImageProcessJobPayload>,
 ): Promise<void> {
-  const { productImageId, sellerId, s3Key } = job.data;
+  const { productImageId, sellerId, productId, s3Key, actorUserId } = job.data;
+
+  let bytes: Buffer;
+  try {
+    bytes = await downloadObjectBytes(s3Key);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[image-process] download failed image=${productImageId} seller=${sellerId}: ${message}`,
+    );
+    throw err;
+  }
 
   try {
-    const bytes = await downloadObjectBytes(s3Key);
-    const meta = await sharp(bytes).metadata();
-    if (!meta.width || !meta.height) {
-      throw new Error("sharp could not read image dimensions");
+    const outcome = await verifyAndFinalizeImage(
+      getWorkerDb(),
+      getObjectStorage(),
+      {
+        productImageId,
+        sellerId,
+        productId,
+        s3Key,
+        bytes,
+        actorUserId,
+      },
+    );
+
+    if (outcome === "rejected") {
+      console.log(
+        `[image-process] rejected image=${productImageId} seller=${sellerId}`,
+      );
+      return;
     }
 
-    await updateImageDimensions(getWorkerDb(), productImageId, sellerId, {
-      width: meta.width,
-      height: meta.height,
-    });
-
-    console.log(
-      `[image-process] updated dimensions image=${productImageId} ${meta.width}x${meta.height}`,
-    );
+    console.log(`[image-process] ready image=${productImageId}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(

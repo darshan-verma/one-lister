@@ -197,6 +197,9 @@ importers:
       ioredis:
         specifier: ^5.11.1
         version: 5.11.1
+      sharp:
+        specifier: ^0.35.5
+        version: 0.35.5(@types/node@24.19.2)
       zod:
         specifier: ^4.6.7
         version: 4.6.7

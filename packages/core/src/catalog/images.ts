@@ -4,18 +4,18 @@ import {
   type Db,
   type ProductImage,
 } from "@one-lister/db";
-import { and, asc, eq, max } from "drizzle-orm";
+import { and, asc, eq, max, ne } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import { writeAuditEvent } from "../audit/write-audit-event.js";
 import { ProductNotFoundError } from "../errors.js";
+import type { ObjectStorage } from "../storage/types.js";
 import { requireProduct } from "./products.js";
 import {
   requestImageUploadInputSchema,
   type RequestImageUploadInput,
 } from "./schemas.js";
 import type { CatalogTenantContext, JobEnqueuer } from "./types.js";
-import type { ObjectStorage } from "../storage/types.js";
 
 const EXT_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -78,6 +78,18 @@ export async function confirmImageUpload(
     });
   }
 
+  // Idempotent: same key already confirmed → return existing, do not re-enqueue.
+  const existing = await db.query.productImages.findFirst({
+    where: and(
+      eq(productImages.sellerId, ctx.sellerId),
+      eq(productImages.productId, productId),
+      eq(productImages.s3Key, key),
+    ),
+  });
+  if (existing) {
+    return existing;
+  }
+
   const head = await storage.headObject(key);
   if (!head.exists) {
     throw new Error("Uploaded object not found");
@@ -93,7 +105,17 @@ export async function confirmImageUpload(
     throw new Error("Uploaded object size is invalid");
   }
 
-  const image = await db.transaction(async (tx) => {
+  const { image, inserted } = await db.transaction(async (tx) => {
+    const raced = await tx.query.productImages.findFirst({
+      where: and(
+        eq(productImages.sellerId, ctx.sellerId),
+        eq(productImages.s3Key, key),
+      ),
+    });
+    if (raced) {
+      return { image: raced, inserted: false as const };
+    }
+
     const [agg] = await tx
       .select({ maxPos: max(productImages.position) })
       .from(productImages)
@@ -115,6 +137,7 @@ export async function confirmImageUpload(
         productId,
         s3Key: key,
         position: nextPosition,
+        status: "pending",
       })
       .returning();
 
@@ -127,15 +150,18 @@ export async function confirmImageUpload(
       metadata: { key, position: nextPosition },
     });
 
-    return row!;
+    return { image: row!, inserted: true as const };
   });
 
-  await jobs.enqueueImageProcess({
-    productImageId: image.id,
-    sellerId: ctx.sellerId,
-    productId,
-    s3Key: key,
-  });
+  if (inserted) {
+    await jobs.enqueueImageProcess({
+      productImageId: image.id,
+      sellerId: ctx.sellerId,
+      productId,
+      s3Key: key,
+      actorUserId: ctx.userId,
+    });
+  }
 
   return image;
 }
@@ -153,6 +179,7 @@ export async function reorderImages(
       where: and(
         eq(productImages.productId, productId),
         eq(productImages.sellerId, ctx.sellerId),
+        ne(productImages.status, "rejected"),
       ),
       orderBy: [asc(productImages.position)],
     });
@@ -249,29 +276,11 @@ export async function listProductImages(
     where: and(
       eq(productImages.productId, productId),
       eq(productImages.sellerId, ctx.sellerId),
+      ne(productImages.status, "rejected"),
     ),
     orderBy: [asc(productImages.position)],
   });
 }
 
-/** Used by the worker after sharp measures dimensions. */
-export async function updateImageDimensions(
-  db: Db,
-  productImageId: string,
-  sellerId: string,
-  dims: { width: number; height: number },
-): Promise<void> {
-  await db
-    .update(productImages)
-    .set({
-      width: dims.width,
-      height: dims.height,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(productImages.id, productImageId),
-        eq(productImages.sellerId, sellerId),
-      ),
-    );
-}
+/** @deprecated Prefer markImageReady from image-process.ts */
+export { markImageReady as updateImageDimensions } from "./image-process.js";

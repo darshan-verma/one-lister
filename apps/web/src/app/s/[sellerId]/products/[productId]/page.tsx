@@ -166,7 +166,7 @@ export default async function ProductDetailPage({ params }: Props) {
       </form>
 
       <ImageUploader
-        key={images.map((i) => i.id).join(",")}
+        key={images.map((i) => `${i.id}:${i.status}`).join(",")}
         sellerId={sellerId}
         productId={productId}
         images={images.map((img) => ({
@@ -175,6 +175,7 @@ export default async function ProductDetailPage({ params }: Props) {
           position: img.position,
           width: img.width,
           height: img.height,
+          status: img.status,
           url: publicObjectUrl(img.s3Key),
         }))}
       />

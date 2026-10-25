@@ -12,7 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { productStatusEnum } from "./enums.js";
+import { productImageStatusEnum, productStatusEnum } from "./enums.js";
 import { timestamps } from "./helpers.js";
 import { sellers } from "./sellers.js";
 
@@ -121,6 +121,7 @@ export const productImages = pgTable(
     position: integer("position").notNull(),
     width: integer("width"),
     height: integer("height"),
+    status: productImageStatusEnum("status").notNull().default("pending"),
     ...timestamps,
   },
   (t) => [
@@ -134,6 +135,7 @@ export const productImages = pgTable(
       columns: [t.variantId, t.sellerId],
       foreignColumns: [variants.id, variants.sellerId],
     }).onDelete("restrict"),
+    unique("product_images_seller_s3_key_uidx").on(t.sellerId, t.s3Key),
     index("product_images_seller_id_idx").on(t.sellerId),
     index("product_images_product_id_position_idx").on(t.productId, t.position),
     index("product_images_variant_id_idx").on(t.variantId),

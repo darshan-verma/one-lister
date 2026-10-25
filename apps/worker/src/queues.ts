@@ -14,4 +14,5 @@ export type ImageProcessJobPayload = {
   sellerId: string;
   productId: string;
   s3Key: string;
+  actorUserId: string;
 };

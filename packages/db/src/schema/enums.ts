@@ -22,6 +22,13 @@ export const integrationModeEnum = pgEnum("integration_mode", ["api", "file"]);
 
 export const productStatusEnum = pgEnum("product_status", ["draft", "active", "archived"]);
 
+/** Lifecycle of an uploaded product image after confirm. */
+export const productImageStatusEnum = pgEnum("product_image_status", [
+  "pending",
+  "ready",
+  "rejected",
+]);
+
 export const listingStatusEnum = pgEnum("listing_status", [
   "draft",
   "validation_failed",

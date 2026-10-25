@@ -21,5 +21,7 @@ export type JobEnqueuer = {
     sellerId: string;
     productId: string;
     s3Key: string;
+    /** User who confirmed the upload — used for reject audit (FK to user). */
+    actorUserId: string;
   }): Promise<void>;
 };

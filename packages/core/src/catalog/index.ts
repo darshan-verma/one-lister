@@ -1,5 +1,12 @@
 export { checkCompleteness } from "./completeness.js";
 export {
+  expectedFormatFromKey,
+  markImageReady,
+  rejectProductImage,
+  verifyAndFinalizeImage,
+  verifyImageBytes,
+} from "./image-process.js";
+export {
   confirmImageUpload,
   deleteImage,
   listProductImages,
@@ -8,6 +15,7 @@ export {
   updateImageDimensions,
 } from "./images.js";
 export { getProductDetail, listProducts, type ListProductsInput, type ProductListItem } from "./list.js";
+export { escapeIlikePattern } from "./search.js";
 export {
   addVariant,
   archiveProduct,

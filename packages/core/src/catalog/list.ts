@@ -6,9 +6,10 @@ import {
   type Db,
   type Product,
 } from "@one-lister/db";
-import { and, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { escapeIlikePattern } from "./search.js";
 import type { CatalogTenantContext } from "./types.js";
 
 export type ProductListItem = {
@@ -25,7 +26,24 @@ const listFiltersSchema = z.object({
   limit: z.number().int().min(1).max(100).default(25),
 });
 
+const cursorIdSchema = z.string().uuid();
+
 export type ListProductsInput = z.input<typeof listFiltersSchema>;
+
+function encodeCursor(id: string): string {
+  return Buffer.from(id, "utf8").toString("base64url");
+}
+
+/** Decode cursor; invalid → null (caller treats as first page). */
+function decodeCursor(cursor: string): string | null {
+  try {
+    const decoded = Buffer.from(cursor, "base64url").toString("utf8");
+    const parsed = cursorIdSchema.safeParse(decoded);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function listProducts(
   db: Db,
@@ -35,12 +53,10 @@ export async function listProducts(
   const input = listFiltersSchema.parse(rawInput);
   const limit = input.limit;
 
-  let cursor: { createdAt: string; id: string } | undefined;
-  if (input.cursor) {
-    cursor = JSON.parse(
-      Buffer.from(input.cursor, "base64url").toString("utf8"),
-    ) as { createdAt: string; id: string };
-  }
+  const cursorId =
+    input.cursor !== undefined && input.cursor.length > 0
+      ? decodeCursor(input.cursor)
+      : null;
 
   const conditions = [eq(products.sellerId, ctx.sellerId)];
 
@@ -54,37 +70,34 @@ export async function listProducts(
   }
 
   if (input.search && input.search.length > 0) {
-    const pattern = `%${input.search}%`;
+    const pattern = `%${escapeIlikePattern(input.search)}%`;
     const matchingVariantProductIds = db
       .selectDistinct({ productId: variants.productId })
       .from(variants)
       .where(
         and(
           eq(variants.sellerId, ctx.sellerId),
-          ilike(variants.sku, pattern),
+          sql`${variants.sku} ilike ${pattern} escape '\\'`,
         ),
       );
 
     conditions.push(
       or(
-        ilike(products.title, pattern),
+        sql`${products.title} ilike ${pattern} escape '\\'`,
         inArray(products.id, matchingVariantProductIds),
       )!,
     );
   }
 
-  if (cursor) {
-    const createdAt = new Date(cursor.createdAt);
-    conditions.push(
-      sql`(${products.createdAt}, ${products.id}) < (${createdAt}, ${cursor.id}::uuid)`,
-    );
+  if (cursorId) {
+    conditions.push(lt(products.id, cursorId));
   }
 
   const rows = await db
     .select()
     .from(products)
     .where(and(...conditions))
-    .orderBy(desc(products.createdAt), desc(products.id))
+    .orderBy(desc(products.id))
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
@@ -153,6 +166,7 @@ export async function listProducts(
         and(
           eq(productImages.sellerId, ctx.sellerId),
           inArray(productImages.productId, productIds),
+          eq(productImages.status, "ready"),
         ),
       )
       .orderBy(productImages.position);
@@ -172,16 +186,7 @@ export async function listProducts(
   }));
 
   const last = page[page.length - 1];
-  const nextCursor =
-    hasMore && last
-      ? Buffer.from(
-          JSON.stringify({
-            createdAt: last.createdAt.toISOString(),
-            id: last.id,
-          }),
-          "utf8",
-        ).toString("base64url")
-      : null;
+  const nextCursor = hasMore && last ? encodeCursor(last.id) : null;
 
   return { items, nextCursor };
 }
@@ -212,6 +217,7 @@ export async function getProductDetail(
     where: and(
       eq(productImages.productId, productId),
       eq(productImages.sellerId, ctx.sellerId),
+      ne(productImages.status, "rejected"),
     ),
     orderBy: [productImages.position],
   });

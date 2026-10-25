@@ -16,6 +16,7 @@ type ImageRow = {
   position: number;
   width: number | null;
   height: number | null;
+  status: "pending" | "ready" | "rejected";
   url: string;
 };
 
@@ -29,7 +30,8 @@ export function ImageUploader({ sellerId, productId, images }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [order, setOrder] = useState(() => images.map((i) => i.id));
+  const visible = images.filter((i) => i.status !== "rejected");
+  const [order, setOrder] = useState(() => visible.map((i) => i.id));
 
   async function onFile(file: File) {
     setError(null);
@@ -103,7 +105,7 @@ export function ImageUploader({ sellerId, productId, images }: Props) {
         }}
       />
       <ul className="flex flex-col gap-2">
-        {images
+        {visible
           .slice()
           .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
           .map((img) => (
@@ -111,16 +113,24 @@ export function ImageUploader({ sellerId, productId, images }: Props) {
               key={img.id}
               className="flex items-center gap-3 rounded border border-black/10 bg-white p-2"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={img.url}
-                alt=""
-                className="h-16 w-16 object-cover"
-              />
+              {img.status === "pending" ? (
+                <div className="flex h-16 w-16 items-center justify-center bg-black/5 text-[10px] uppercase tracking-wide text-black/50">
+                  Processing
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={img.url}
+                  alt=""
+                  className="h-16 w-16 object-cover"
+                />
+              )}
               <div className="flex-1 text-xs text-black/60">
-                {img.width && img.height
-                  ? `${img.width}×${img.height}`
-                  : "Processing…"}
+                {img.status === "pending"
+                  ? "Processing…"
+                  : img.width && img.height
+                    ? `${img.width}×${img.height}`
+                    : "Ready"}
               </div>
               <button
                 type="button"

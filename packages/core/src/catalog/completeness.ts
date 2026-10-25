@@ -43,7 +43,8 @@ export function checkCompleteness(input: CompletenessInput): CompletenessResult 
       message: "Country of origin is required",
     });
   }
-  if (images.length < 1) {
+  const readyImages = images.filter((img) => img.status === "ready");
+  if (readyImages.length < 1) {
     missing.push({
       field: "images",
       message: "At least one product image is required",
